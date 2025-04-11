@@ -6,7 +6,7 @@ ALTER TABLE transactions ADD COLUMN parent_transaction_id UUID REFERENCES transa
 
 -- Create a function to update transaction status based on due date
 CREATE OR REPLACE FUNCTION update_transaction_status()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 BEGIN
   -- If the transaction is pending and due date is in the past, mark as late
   IF NEW.status = 'pending' AND NEW.due_date < CURRENT_DATE THEN
@@ -15,7 +15,7 @@ BEGIN
   
   RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- Create a trigger to automatically update transaction status
 CREATE TRIGGER update_transaction_status_trigger
