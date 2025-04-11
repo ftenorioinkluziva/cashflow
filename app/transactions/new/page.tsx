@@ -1,0 +1,24 @@
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
+import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
+import TransactionForm from "@/components/transactions/transaction-form"
+
+export default async function NewTransactionPage() {
+  const supabase = createServerComponentClient({ cookies })
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  if (!session) {
+    redirect("/login")
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">Nova Transação</h1>
+      </div>
+      <TransactionForm />
+    </div>
+  )
+}
