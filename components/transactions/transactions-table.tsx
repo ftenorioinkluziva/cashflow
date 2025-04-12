@@ -4,30 +4,27 @@ import { useState, useEffect } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Plus, FileDown, FileUp, Filter } from "lucide-react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Plus,
+  FileDown,
+  FileUp,
+  Filter,
+  Loader2,
+} from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { formatCurrency } from "@/lib/utils"
 import { useRouter } from "next/navigation"
-
-interface Transaction {
-  id: string
-  description: string
-  amount: number
-  type: "income" | "expense"
-  category_id: string
-  category_name?: string
-  due_date: string
-  payment_date: string | null
-  status: "pending" | "paid" | "late" | "canceled"
-  payment_method: string | null
-}
+import { useToast } from "@/components/ui/use-toast"
 
 export default function TransactionsTable() {
-  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
@@ -35,131 +32,62 @@ export default function TransactionsTable() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [typeFilter, setTypeFilter] = useState("all")
+  const [totalCount, setTotalCount] = useState(0)
   const router = useRouter()
+  const { toast } = useToast()
   const supabase = createClientComponentClient()
 
   useEffect(() => {
-    const fetchTransactions = async () => {
-      setLoading(true)
-      try {
-        // Calculate range for pagination
-        const from = (page - 1) * pageSize
-        const to = from + pageSize - 1
-
-        // Build query
-        let query = supabase
-          .from("transactions")
-          .select(
-            `
-            *,
-            categories(name)
-          `,
-            { count: "exact" },
-          )
-          .order("due_date", { ascending: false })
-          .range(from, to)
-
-        // Apply filters
-        if (search) {
-          query = query.ilike("description", `%${search}%`)
-        }
-
-        if (statusFilter !== "all") {
-          query = query.eq("status", statusFilter)
-        }
-
-        if (typeFilter !== "all") {
-          query = query.eq("type", typeFilter)
-        }
-
-        const { data, count, error } = await query
-
-        if (error) throw error
-
-        // Transform data to include category name
-        const transformedData =
-          data?.map((item) => ({
-            ...item,
-            category_name: item.categories?.name,
-          })) || []
-
-        setTransactions(transformedData)
-        setTotalPages(Math.ceil((count || 0) / pageSize))
-      } catch (error) {
-        console.error("Error fetching transactions:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
     fetchTransactions()
-  }, [supabase, page, pageSize, search, statusFilter, typeFilter])
+  }, [page, pageSize, search, statusFilter, typeFilter])
 
-  // Mock data for initial display
-  const mockTransactions = [
-    {
-      id: "1",
-      description: "Aluguel do Escritório",
-      amount: 3500,
-      type: "expense",
-      category_id: "1",
-      category_name: "Instalações",
-      due_date: "2023-05-10T00:00:00.000Z",
-      payment_date: null,
-      status: "pending",
-      payment_method: "Transferência",
-    },
-    {
-      id: "2",
-      description: "Pagamento Cliente XYZ",
-      amount: 7800,
-      type: "income",
-      category_id: "2",
-      category_name: "Vendas",
-      due_date: "2023-05-15T00:00:00.000Z",
-      payment_date: null,
-      status: "pending",
-      payment_method: "Boleto",
-    },
-    {
-      id: "3",
-      description: "Conta de Energia",
-      amount: 450,
-      type: "expense",
-      category_id: "3",
-      category_name: "Utilidades",
-      due_date: "2023-05-20T00:00:00.000Z",
-      payment_date: null,
-      status: "pending",
-      payment_method: "Débito Automático",
-    },
-    {
-      id: "4",
-      description: "Impostos Mensais",
-      amount: 1200,
-      type: "expense",
-      category_id: "4",
-      category_name: "Impostos",
-      due_date: "2023-05-25T00:00:00.000Z",
-      payment_date: null,
-      status: "pending",
-      payment_method: "DARF",
-    },
-    {
-      id: "5",
-      description: "Assinatura Software",
-      amount: 299,
-      type: "expense",
-      category_id: "5",
-      category_name: "Serviços",
-      due_date: "2023-05-28T00:00:00.000Z",
-      payment_date: null,
-      status: "pending",
-      payment_method: "Cartão de Crédito",
-    },
-  ] as Transaction[]
+  const fetchTransactions = async () => {
+    setLoading(true)
+    try {
+      // Calculate range for pagination
+      const from = (page - 1) * pageSize
+      const to = from + pageSize - 1
 
-  const getStatusColor = (status: string) => {
+      // Build query
+      let query = supabase
+        .from("transactions")
+        .select("*", { count: "exact" })
+        .order("due_date", { ascending: false })
+        .range(from, to)
+
+      // Apply filters
+      if (search) {
+        query = query.ilike("description", `%${search}%`)
+      }
+
+      if (statusFilter !== "all") {
+        query = query.eq("status", statusFilter)
+      }
+
+      if (typeFilter !== "all") {
+        query = query.eq("type", typeFilter)
+      }
+
+      const { data, count, error } = await query
+
+      if (error) throw error
+
+      setTransactions(data || [])
+      setTotalCount(count || 0)
+      setTotalPages(Math.ceil((count || 0) / pageSize))
+    } catch (error) {
+      console.error("Error fetching transactions:", error)
+      toast({
+        title: "Erro ao carregar transações",
+        description: "Não foi possível carregar as transações.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getStatusColor = (status) => {
     switch (status) {
       case "paid":
         return "bg-green-500 hover:bg-green-600"
@@ -174,7 +102,7 @@ export default function TransactionsTable() {
     }
   }
 
-  const getStatusText = (status: string) => {
+  const getStatusText = (status) => {
     switch (status) {
       case "paid":
         return "Pago"
@@ -189,20 +117,27 @@ export default function TransactionsTable() {
     }
   }
 
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(value)
+  }
+
   const handleAddTransaction = () => {
     router.push("/transactions/new")
   }
 
   const handleExport = () => {
-    // Implement export functionality
-    console.log("Export transactions")
+    toast({
+      title: "Exportação",
+      description: "Funcionalidade de exportação será implementada em breve.",
+    })
   }
 
   const handleImport = () => {
     router.push("/import")
   }
-
-  const displayTransactions = transactions.length > 0 ? transactions : mockTransactions
 
   return (
     <div className="space-y-4">
@@ -236,7 +171,7 @@ export default function TransactionsTable() {
               <SelectItem value="expense">Despesa</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon">
+          <Button variant="outline" size="icon" onClick={fetchTransactions}>
             <Filter className="h-4 w-4" />
           </Button>
         </div>
@@ -261,7 +196,6 @@ export default function TransactionsTable() {
           <TableHeader>
             <TableRow>
               <TableHead>Descrição</TableHead>
-              <TableHead>Categoria</TableHead>
               <TableHead>Vencimento</TableHead>
               <TableHead>Valor</TableHead>
               <TableHead>Status</TableHead>
@@ -269,21 +203,49 @@ export default function TransactionsTable() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {displayTransactions.map((transaction) => (
-              <TableRow key={transaction.id} className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
-                <TableCell className="font-medium">{transaction.description}</TableCell>
-                <TableCell>{transaction.category_name || "Sem categoria"}</TableCell>
-                <TableCell>{format(new Date(transaction.due_date), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
-                <TableCell className={transaction.type === "income" ? "text-green-500" : "text-red-500"}>
-                  {transaction.type === "income" ? "+" : "-"}
-                  {formatCurrency(transaction.amount)}
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={5} className="h-24 text-center">
+                  <div className="flex justify-center items-center h-full">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
                 </TableCell>
-                <TableCell>
-                  <Badge className={getStatusColor(transaction.status)}>{getStatusText(transaction.status)}</Badge>
-                </TableCell>
-                <TableCell>{transaction.payment_method || "-"}</TableCell>
               </TableRow>
-            ))}
+            ) : transactions.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="h-24 text-center">
+                  <p className="text-muted-foreground">Nenhuma transação encontrada</p>
+                  {(search || statusFilter !== "all" || typeFilter !== "all") && (
+                    <Button
+                      variant="link"
+                      onClick={() => {
+                        setSearch("")
+                        setStatusFilter("all")
+                        setTypeFilter("all")
+                      }}
+                      className="mt-2"
+                    >
+                      Limpar filtros
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            ) : (
+              transactions.map((transaction) => (
+                <TableRow key={transaction.id} className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <TableCell className="font-medium">{transaction.description}</TableCell>
+                  <TableCell>{format(new Date(transaction.due_date), "dd/MM/yyyy", { locale: ptBR })}</TableCell>
+                  <TableCell className={transaction.type === "income" ? "text-green-500" : "text-red-500"}>
+                    {transaction.type === "income" ? "+" : "-"}
+                    {formatCurrency(transaction.amount)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={getStatusColor(transaction.status)}>{getStatusText(transaction.status)}</Badge>
+                  </TableCell>
+                  <TableCell>{transaction.payment_method || "-"}</TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
@@ -302,23 +264,33 @@ export default function TransactionsTable() {
             </SelectContent>
           </Select>
           <p className="text-sm text-muted-foreground">
-            Mostrando {displayTransactions.length} de {pageSize * totalPages} resultados
+            Mostrando {transactions.length} de {totalCount} resultados
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => setPage(1)} disabled={page === 1}>
+          <Button variant="outline" size="icon" onClick={() => setPage(1)} disabled={page === 1 || loading}>
             <ChevronsLeft className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="icon" onClick={() => setPage(page - 1)} disabled={page === 1}>
+          <Button variant="outline" size="icon" onClick={() => setPage(page - 1)} disabled={page === 1 || loading}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="text-sm">
-            Página {page} de {totalPages}
+            Página {page} de {totalPages || 1}
           </span>
-          <Button variant="outline" size="icon" onClick={() => setPage(page + 1)} disabled={page === totalPages}>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setPage(page + 1)}
+            disabled={page === totalPages || totalPages === 0 || loading}
+          >
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="icon" onClick={() => setPage(totalPages)} disabled={page === totalPages}>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setPage(totalPages)}
+            disabled={page === totalPages || totalPages === 0 || loading}
+          >
             <ChevronsRight className="h-4 w-4" />
           </Button>
         </div>

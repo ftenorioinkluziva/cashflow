@@ -1,9 +1,12 @@
-import { redirect } from "next/navigation"
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
-import DashboardOverview from "@/components/dashboard/dashboard-overview"
+import { redirect } from "next/navigation"
+import TransactionsTable from "@/components/transactions/transactions-table"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import { Plus } from "lucide-react"
 
-export default async function Home() {
+export default async function TransactionsPage() {
   const supabase = createServerComponentClient({ cookies })
   const {
     data: { session },
@@ -14,8 +17,11 @@ export default async function Home() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col">
-      <DashboardOverview />
-    </main>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">Transações</h1>
+      </div>
+      <TransactionsTable />
+    </div>
   )
 }

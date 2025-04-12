@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { format, isToday, isTomorrow, addDays, isWithinInterval } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Bell, CheckCircle2 } from "lucide-react"
+import { Bell, CheckCircle2, Loader2 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -100,36 +100,6 @@ export default function UpcomingPayments() {
     return "bg-blue-500"
   }
 
-  // Mock data for initial display
-  const mockTransactions = [
-    {
-      id: "1",
-      description: "Aluguel do Escritório",
-      amount: 3500,
-      due_date: addDays(new Date(), 1).toISOString(),
-      status: "pending",
-      type: "expense" as const,
-    },
-    {
-      id: "2",
-      description: "Pagamento Cliente XYZ",
-      amount: 7800,
-      due_date: addDays(new Date(), 2).toISOString(),
-      status: "pending",
-      type: "income" as const,
-    },
-    {
-      id: "3",
-      description: "Conta de Energia",
-      amount: 450,
-      due_date: addDays(new Date(), 3).toISOString(),
-      status: "pending",
-      type: "expense" as const,
-    },
-  ]
-
-  const displayTransactions = transactions.length > 0 ? transactions : mockTransactions
-
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -140,14 +110,18 @@ export default function UpcomingPayments() {
         <Bell className="h-5 w-5 text-muted-foreground" />
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {displayTransactions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-6 text-center">
-              <CheckCircle2 className="h-10 w-10 text-green-500 mb-2" />
-              <p className="text-muted-foreground">Não há contas a vencer nos próximos dias</p>
-            </div>
-          ) : (
-            displayTransactions.map((transaction) => (
+        {loading ? (
+          <div className="flex justify-center items-center py-10">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : transactions.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-6 text-center">
+            <CheckCircle2 className="h-10 w-10 text-green-500 mb-2" />
+            <p className="text-muted-foreground">Não há contas a vencer nos próximos dias</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {transactions.map((transaction) => (
               <div
                 key={transaction.id}
                 className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -172,9 +146,9 @@ export default function UpcomingPayments() {
                   Marcar como pago
                 </Button>
               </div>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </CardContent>
       <CardFooter>
         <Button variant="ghost" className="w-full" onClick={fetchUpcomingTransactions}>

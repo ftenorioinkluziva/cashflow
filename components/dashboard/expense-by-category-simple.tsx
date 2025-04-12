@@ -340,10 +340,12 @@ export default function DashboardOverview() {
             <Card>
               <CardHeader>
                 <CardTitle>Despesas por Categoria</CardTitle>
-                <CardDescription>Distribuição de despesas do mês atual</CardDescription>
+                <CardDescription>
+                  Distribuição de despesas por categoria principal no período selecionado
+                </CardDescription>
               </CardHeader>
               <CardContent className="h-[300px]">
-                <ExpenseByCategorySimple />
+                <ExpenseByCategorySimple period={period} />
               </CardContent>
             </Card>
             <Card>

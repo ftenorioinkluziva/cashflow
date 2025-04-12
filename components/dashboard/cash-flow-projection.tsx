@@ -26,24 +26,84 @@ export default function CashFlowProjection() {
     fetchProjectionData()
   }, [days])
 
+  // Replace the fetchProjectionData function with this implementation that doesn't rely on the stored procedure
+
   const fetchProjectionData = async () => {
     setLoading(true)
     try {
-      const { data, error } = await supabase.rpc("get_cash_flow_projection", {
-        projection_days: days,
+      // Get current balance
+      const { data: balanceData, error: balanceError } = await supabase
+        .from("transactions")
+        .select("amount, type")
+        .eq("status", "paid")
+
+      if (balanceError) throw balanceError
+
+      // Calculate current balance
+      let currentBalance = 0
+      ;(balanceData || []).forEach((transaction) => {
+        const amount = Number.parseFloat(transaction.amount)
+        if (transaction.type === "income") {
+          currentBalance += amount
+        } else {
+          currentBalance -= amount
+        }
       })
 
-      if (error) throw error
+      // Get upcoming transactions for projection
+      const today = new Date()
+      const endDate = new Date()
+      endDate.setDate(today.getDate() + days)
 
-      // Transform data
-      const transformedData = (data || []).map((item) => ({
-        date: item.date,
-        income: Number.parseFloat(item.income),
-        expense: Number.parseFloat(item.expense),
-        balance: Number.parseFloat(item.balance),
-      }))
+      const { data: upcomingData, error: upcomingError } = await supabase
+        .from("transactions")
+        .select("amount, type, due_date")
+        .eq("status", "pending")
+        .gte("due_date", today.toISOString())
+        .lte("due_date", endDate.toISOString())
+        .order("due_date", { ascending: true })
 
-      setData(transformedData)
+      if (upcomingError) throw upcomingError
+
+      // Generate projection data
+      const projectionData: ProjectionData[] = []
+      let runningBalance = currentBalance
+
+      // Create a map of dates to transactions
+      const transactionsByDate = new Map()
+      ;(upcomingData || []).forEach((transaction) => {
+        const date = new Date(transaction.due_date).toISOString().split("T")[0]
+        if (!transactionsByDate.has(date)) {
+          transactionsByDate.set(date, { income: 0, expense: 0 })
+        }
+
+        const amount = Number.parseFloat(transaction.amount)
+        if (transaction.type === "income") {
+          transactionsByDate.get(date).income += amount
+        } else {
+          transactionsByDate.get(date).expense += amount
+        }
+      })
+
+      // Generate data for each day
+      for (let i = 0; i <= days; i++) {
+        const date = new Date()
+        date.setDate(today.getDate() + i)
+        const dateStr = date.toISOString().split("T")[0]
+
+        const dayData = transactionsByDate.get(dateStr) || { income: 0, expense: 0 }
+
+        runningBalance += dayData.income - dayData.expense
+
+        projectionData.push({
+          date: dateStr,
+          income: dayData.income,
+          expense: dayData.expense,
+          balance: runningBalance,
+        })
+      }
+
+      setData(projectionData)
     } catch (error) {
       console.error("Error fetching projection data:", error)
     } finally {

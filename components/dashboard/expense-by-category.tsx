@@ -5,6 +5,7 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts"
 import { formatCurrency } from "@/lib/utils"
+import { Loader2 } from "lucide-react"
 
 interface CategoryExpense {
   id: string
@@ -32,21 +33,50 @@ export default function ExpenseByCategory() {
       const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
       const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0)
 
-      // Query to get expenses grouped by category
-      const { data, error } = await supabase.rpc("get_expenses_by_category", {
-        start_date: startOfMonth.toISOString(),
-        end_date: endOfMonth.toISOString(),
-      })
+      // Direct query to get expenses grouped by category
+      const { data, error } = await supabase
+        .from("transactions")
+        .select(`
+        amount,
+        type,
+        categories:category_id (
+          id,
+          name
+        )
+      `)
+        .eq("type", "expense")
+        .gte("due_date", startOfMonth.toISOString())
+        .lte("due_date", endOfMonth.toISOString())
 
       if (error) throw error
 
-      // Transform data and assign colors
-      const transformedData = (data || []).map((item, index) => ({
-        id: item.category_id,
-        name: item.category_name,
-        amount: Number.parseFloat(item.total_amount),
-        color: COLORS[index % COLORS.length],
-      }))
+      // Process the data to group by category
+      const categoryMap = new Map()
+      ;(data || []).forEach((transaction) => {
+        if (!transaction.categories) return
+
+        const categoryId = transaction.categories.id
+        const categoryName = transaction.categories.name
+        const amount = Number.parseFloat(transaction.amount)
+
+        if (categoryMap.has(categoryId)) {
+          categoryMap.get(categoryId).amount += amount
+        } else {
+          categoryMap.set(categoryId, {
+            id: categoryId,
+            name: categoryName,
+            amount: amount,
+          })
+        }
+      })
+
+      // Convert map to array and sort by amount
+      const transformedData = Array.from(categoryMap.values())
+        .sort((a, b) => b.amount - a.amount)
+        .map((item, index) => ({
+          ...item,
+          color: COLORS[index % COLORS.length],
+        }))
 
       setData(transformedData)
     } catch (error) {
@@ -55,17 +85,6 @@ export default function ExpenseByCategory() {
       setLoading(false)
     }
   }
-
-  // Mock data for initial display
-  const mockData = [
-    { id: "1", name: "Instalações", amount: 3500, color: COLORS[0] },
-    { id: "2", name: "Serviços", amount: 2800, color: COLORS[1] },
-    { id: "3", name: "Impostos", amount: 1200, color: COLORS[2] },
-    { id: "4", name: "Utilidades", amount: 950, color: COLORS[3] },
-    { id: "5", name: "Outros", amount: 1500, color: COLORS[4] },
-  ]
-
-  const displayData = data.length > 0 ? data : mockData
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -79,6 +98,34 @@ export default function ExpenseByCategory() {
     return null
   }
 
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Despesas por Categoria</CardTitle>
+          <CardDescription>Distribuição de despesas do mês atual</CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center items-center h-[300px]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (data.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Despesas por Categoria</CardTitle>
+          <CardDescription>Distribuição de despesas do mês atual</CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center items-center h-[300px]">
+          <p className="text-muted-foreground">Nenhuma despesa registrada neste mês</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -90,7 +137,7 @@ export default function ExpenseByCategory() {
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={displayData}
+                data={data}
                 cx="50%"
                 cy="50%"
                 labelLine={false}
@@ -100,7 +147,7 @@ export default function ExpenseByCategory() {
                 nameKey="name"
                 label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
               >
-                {displayData.map((entry, index) => (
+                {data.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>

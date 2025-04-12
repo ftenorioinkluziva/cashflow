@@ -8,7 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { CalendarIcon } from "lucide-react"
+import { CalendarIcon, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -53,29 +53,32 @@ const formSchema = z.object({
 export default function TransactionForm() {
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingCategories, setLoadingCategories] = useState(true)
   const router = useRouter()
   const { toast } = useToast()
   const supabase = createClientComponentClient()
 
+  // Fix: Ensure all form fields have proper initial values
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       description: "",
-      amount: undefined,
+      amount: 0, // Fix: Initialize with 0 instead of undefined
       type: "expense",
-      category_id: "",
+      category_id: "", // Empty string instead of undefined
       due_date: new Date(),
       payment_date: null,
       status: "pending",
-      payment_method: "",
-      notes: "",
-      department: "",
+      payment_method: "", // Empty string instead of undefined
+      notes: "", // Empty string instead of undefined
+      department: "", // Empty string instead of undefined
       recurrence: "once",
     },
   })
 
   useEffect(() => {
     const fetchCategories = async () => {
+      setLoadingCategories(true)
       try {
         const { data, error } = await supabase.from("categories").select("id, name").order("name")
 
@@ -83,25 +86,18 @@ export default function TransactionForm() {
         setCategories(data || [])
       } catch (error) {
         console.error("Error fetching categories:", error)
+        toast({
+          title: "Erro ao carregar categorias",
+          description: "Não foi possível carregar as categorias.",
+          variant: "destructive",
+        })
+      } finally {
+        setLoadingCategories(false)
       }
     }
 
     fetchCategories()
-  }, [supabase])
-
-  // Mock categories for initial display
-  const mockCategories = [
-    { id: "1", name: "Instalações" },
-    { id: "2", name: "Vendas" },
-    { id: "3", name: "Utilidades" },
-    { id: "4", name: "Impostos" },
-    { id: "5", name: "Serviços" },
-    { id: "6", name: "Salários" },
-    { id: "7", name: "Marketing" },
-    { id: "8", name: "Equipamentos" },
-  ]
-
-  const displayCategories = categories.length > 0 ? categories : mockCategories
+  }, [supabase, toast])
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setLoading(true)
@@ -114,9 +110,9 @@ export default function TransactionForm() {
         due_date: values.due_date.toISOString(),
         payment_date: values.payment_date ? values.payment_date.toISOString() : null,
         status: values.status,
-        payment_method: values.payment_method,
-        notes: values.notes,
-        department: values.department,
+        payment_method: values.payment_method || null, // Fix: Convert empty string to null
+        notes: values.notes || null, // Fix: Convert empty string to null
+        department: values.department || null, // Fix: Convert empty string to null
         recurrence: values.recurrence,
       })
 
@@ -167,7 +163,18 @@ export default function TransactionForm() {
                   <FormItem>
                     <FormLabel>Valor</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" placeholder="0,00" {...field} />
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0,00"
+                        {...field}
+                        // Fix: Ensure value is always a string for the input
+                        value={field.value === 0 ? "" : field.value}
+                        onChange={(e) => {
+                          const value = e.target.value === "" ? 0 : Number.parseFloat(e.target.value)
+                          field.onChange(value)
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -202,18 +209,38 @@ export default function TransactionForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Categoria</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value || ""}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecione uma categoria" />
+                          {loadingCategories ? (
+                            <div className="flex items-center">
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              <span>Carregando categorias...</span>
+                            </div>
+                          ) : (
+                            <SelectValue placeholder="Selecione uma categoria" />
+                          )}
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {displayCategories.map((category) => (
-                          <SelectItem key={category.id} value={category.id}>
-                            {category.name}
-                          </SelectItem>
-                        ))}
+                        {categories.length === 0 ? (
+                          <div className="p-2 text-center">
+                            <p className="text-sm text-muted-foreground">Nenhuma categoria encontrada</p>
+                            <Button
+                              variant="link"
+                              className="mt-1 h-auto p-0"
+                              onClick={() => router.push("/categories")}
+                            >
+                              Criar categorias
+                            </Button>
+                          </div>
+                        ) : (
+                          categories.map((category) => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -288,7 +315,7 @@ export default function TransactionForm() {
                         <Calendar
                           mode="single"
                           selected={field.value || undefined}
-                          onSelect={field.onChange}
+                          onSelect={(date) => field.onChange(date)}
                           disabled={(date) => date < new Date("1900-01-01")}
                           initialFocus
                         />
@@ -306,7 +333,7 @@ export default function TransactionForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione o status" />
@@ -331,7 +358,7 @@ export default function TransactionForm() {
                   <FormItem>
                     <FormLabel>Método de Pagamento</FormLabel>
                     <FormControl>
-                      <Input placeholder="Ex: Boleto, Transferência, Cartão" {...field} />
+                      <Input placeholder="Ex: Boleto, Transferência, Cartão" {...field} value={field.value || ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -345,7 +372,7 @@ export default function TransactionForm() {
                   <FormItem>
                     <FormLabel>Departamento</FormLabel>
                     <FormControl>
-                      <Input placeholder="Centro de custo/departamento" {...field} />
+                      <Input placeholder="Centro de custo/departamento" {...field} value={field.value || ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -358,7 +385,7 @@ export default function TransactionForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Recorrência</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione a recorrência" />
@@ -384,7 +411,12 @@ export default function TransactionForm() {
                 <FormItem>
                   <FormLabel>Observações</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Observações adicionais" className="resize-none" {...field} />
+                    <Textarea
+                      placeholder="Observações adicionais"
+                      className="resize-none"
+                      {...field}
+                      value={field.value || ""}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -396,7 +428,14 @@ export default function TransactionForm() {
                 Cancelar
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? "Salvando..." : "Salvar"}
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  "Salvar"
+                )}
               </Button>
             </div>
           </form>

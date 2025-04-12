@@ -1,12 +1,9 @@
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
-import CategoriesTable from "@/components/categories/categories-table"
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
-import { Plus } from "lucide-react"
+import CategoryForm from "@/components/categories/category-form"
 
-export default async function CategoriesPage() {
+export default async function NewCategoryPage() {
   const supabase = createServerComponentClient({ cookies })
   const {
     data: { session },
@@ -19,9 +16,9 @@ export default async function CategoriesPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Categorias</h1>
+        <h1 className="text-2xl font-bold">Nova Categoria</h1>
       </div>
-      <CategoriesTable />
+      <CategoryForm />
     </div>
   )
 }
