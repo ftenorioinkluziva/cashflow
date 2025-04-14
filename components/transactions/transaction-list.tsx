@@ -7,13 +7,16 @@ import { ptBR } from "date-fns/locale"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
-import { Loader2 } from "lucide-react"
+import { Loader2, AlertTriangle } from "lucide-react"
+import { useToast } from "@/components/ui/use-toast"
 
 export default function TransactionList({ limit = 10, filter = "all" }) {
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const supabase = createClientComponentClient()
   const router = useRouter()
+  const { toast } = useToast()
 
   useEffect(() => {
     fetchTransactions()
@@ -21,7 +24,31 @@ export default function TransactionList({ limit = 10, filter = "all" }) {
 
   const fetchTransactions = async () => {
     setLoading(true)
+    setError(null)
+
     try {
+      // Verificar a sessão antes de fazer requisições
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError) {
+        console.error("Session error:", sessionError)
+        setError(sessionError)
+        toast({
+          title: "Erro de autenticação",
+          description: "Sua sessão expirou. Por favor, faça login novamente.",
+          variant: "destructive",
+        })
+        router.push("/login")
+        return
+      }
+
+      if (!sessionData.session) {
+        const authError = new Error("Sessão não encontrada")
+        authError.code = "401"
+        setError(authError)
+        return
+      }
+
       let query = supabase.from("transactions").select("*").order("due_date", { ascending: true })
 
       // Apply filters
@@ -47,10 +74,32 @@ export default function TransactionList({ limit = 10, filter = "all" }) {
 
       const { data, error } = await query
 
-      if (error) throw error
+      if (error) {
+        // Verificar se é um erro de autenticação
+        if (error.code === "PGRST301" || error.code === "401" || error.message.includes("JWT")) {
+          toast({
+            title: "Sessão expirada",
+            description: "Sua sessão expirou. Por favor, faça login novamente.",
+            variant: "destructive",
+          })
+          router.push("/login")
+          return
+        }
+        throw error
+      }
+
       setTransactions(data || [])
     } catch (error) {
       console.error("Error fetching transactions:", error)
+      setError(error)
+
+      if (!error.code || (error.code !== "PGRST301" && error.code !== "401" && !error.message?.includes("JWT"))) {
+        toast({
+          title: "Erro ao carregar transações",
+          description: "Não foi possível carregar as transações. Tente novamente mais tarde.",
+          variant: "destructive",
+        })
+      }
     } finally {
       setLoading(false)
     }
@@ -91,6 +140,22 @@ export default function TransactionList({ limit = 10, filter = "all" }) {
       style: "currency",
       currency: "BRL",
     }).format(value)
+  }
+
+  // Se houver erro de autenticação, mostra mensagem e botão para login
+  if (
+    error &&
+    (error.code === "PGRST301" || error.code === "401" || (error.message && error.message.includes("JWT")))
+  ) {
+    return (
+      <div className="flex flex-col items-center justify-center py-6 space-y-2">
+        <AlertTriangle className="h-8 w-8 text-amber-500" />
+        <p className="text-sm text-center text-muted-foreground">Sessão expirada. Faça login novamente.</p>
+        <Button size="sm" onClick={() => router.push("/login")}>
+          Fazer login
+        </Button>
+      </div>
+    )
   }
 
   if (loading) {

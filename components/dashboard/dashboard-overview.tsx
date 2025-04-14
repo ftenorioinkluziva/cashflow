@@ -8,6 +8,8 @@ import { ArrowUpRight, ArrowDownRight, AlertTriangle, Loader2 } from "lucide-rea
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import TransactionList from "@/components/transactions/transaction-list"
 import ExpenseByCategorySimple from "@/components/dashboard/expense-by-category-simple"
+import { useRouter } from "next/navigation"
+import { useToast } from "@/components/ui/use-toast"
 
 export default function DashboardOverview() {
   const [summary, setSummary] = useState({
@@ -19,15 +21,57 @@ export default function DashboardOverview() {
   const [chartData, setChartData] = useState([])
   const [period, setPeriod] = useState("month")
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const supabase = createClientComponentClient()
+  const router = useRouter()
+  const { toast } = useToast()
 
   useEffect(() => {
-    fetchDashboardData()
-  }, [period])
+    // Verificar a sessão do usuário ao carregar o componente
+    const checkSession = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession()
+
+        if (error) {
+          console.error("Auth error:", error.message)
+          toast({
+            title: "Erro de autenticação",
+            description: "Sua sessão expirou. Por favor, faça login novamente.",
+            variant: "destructive",
+          })
+          router.push("/login")
+          return
+        }
+
+        if (!data.session) {
+          router.push("/login")
+          return
+        }
+
+        // Se a sessão estiver válida, busca os dados
+        fetchDashboardData()
+      } catch (err) {
+        console.error("Session check error:", err)
+        router.push("/login")
+      }
+    }
+
+    checkSession()
+  }, [period, router])
 
   const fetchDashboardData = async () => {
     setLoading(true)
+    setError(null)
+
     try {
+      // Verificar novamente a sessão antes de fazer requisições
+      const { data: sessionData } = await supabase.auth.getSession()
+
+      if (!sessionData.session) {
+        router.push("/login")
+        return
+      }
+
       // Calculate date range based on period
       let startDate, endDate
       const today = new Date()
@@ -60,7 +104,23 @@ export default function DashboardOverview() {
       // Fetch all transactions for calculations
       const { data: allTransactions, error: transactionsError } = await supabase.from("transactions").select("*")
 
-      if (transactionsError) throw transactionsError
+      if (transactionsError) {
+        // Verificar se é um erro de autenticação
+        if (
+          transactionsError.code === "PGRST301" ||
+          transactionsError.code === "401" ||
+          transactionsError.message.includes("JWT")
+        ) {
+          toast({
+            title: "Sessão expirada",
+            description: "Sua sessão expirou. Por favor, faça login novamente.",
+            variant: "destructive",
+          })
+          router.push("/login")
+          return
+        }
+        throw transactionsError
+      }
 
       // Calculate summary data
       let balance = 0
@@ -219,6 +279,12 @@ export default function DashboardOverview() {
       setChartData(newChartData)
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
+      setError(error)
+      toast({
+        title: "Erro ao carregar dados",
+        description: "Não foi possível carregar os dados do dashboard. Tente novamente mais tarde.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -240,6 +306,26 @@ export default function DashboardOverview() {
     { name: "Mai", income: 1890, expense: 4800 },
     { name: "Jun", income: 2390, expense: 3800 },
   ]
+
+  // Se houver erro de autenticação, mostra mensagem e botão para login
+  if (
+    error &&
+    (error.code === "PGRST301" || error.code === "401" || (error.message && error.message.includes("JWT")))
+  ) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[50vh] space-y-4">
+        <AlertTriangle className="h-16 w-16 text-amber-500" />
+        <h2 className="text-2xl font-bold">Sessão expirada</h2>
+        <p className="text-muted-foreground">Sua sessão expirou ou você não está autenticado.</p>
+        <button
+          className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90"
+          onClick={() => router.push("/login")}
+        >
+          Fazer login
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -340,10 +426,12 @@ export default function DashboardOverview() {
             <Card>
               <CardHeader>
                 <CardTitle>Despesas por Categoria</CardTitle>
-                <CardDescription>Distribuição de despesas do mês atual</CardDescription>
+                <CardDescription>
+                  Distribuição de despesas por categoria principal no período selecionado
+                </CardDescription>
               </CardHeader>
               <CardContent className="h-[300px]">
-                <ExpenseByCategorySimple />
+                <ExpenseByCategorySimple period={period} />
               </CardContent>
             </Card>
             <Card>

@@ -1,27 +1,33 @@
+import { redirect } from "next/navigation"
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
-import { redirect } from "next/navigation"
-import TransactionsTable from "@/components/transactions/transactions-table"
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
-import { Plus } from "lucide-react"
+import DashboardOverview from "@/components/dashboard/dashboard-overview"
 
-export default async function TransactionsPage() {
+export default async function Home() {
   const supabase = createServerComponentClient({ cookies })
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
 
-  if (!session) {
+  try {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession()
+
+    if (error) {
+      console.error("Auth error:", error.message)
+      redirect("/login")
+    }
+
+    if (!session) {
+      redirect("/login")
+    }
+
+    return (
+      <main className="flex min-h-screen flex-col">
+        <DashboardOverview />
+      </main>
+    )
+  } catch (error) {
+    console.error("Unexpected error:", error)
     redirect("/login")
   }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Transações</h1>
-      </div>
-      <TransactionsTable />
-    </div>
-  )
 }
